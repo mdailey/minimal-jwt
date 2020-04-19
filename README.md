@@ -1,16 +1,19 @@
 
-# Minimal JWT Example
+# Minimal JWT Example, Flaws, and Fixes
 
-Here's an example of a minimal Node application using
-JWT.
+This an example of a minimal Node application using
+JWT, a quick examination of its limitations and flaws,
+and a couple alternatives that address those flaws.
 
-## NodeJS installation
+## A basic single page application using JWTs for authentication
+
+### NodeJS installation
 
     $ sudo apt install curl software-properties-common
     $ curl -sL https://deb.nodesource.com/setup_10.x | sudo -E bash -
     $ sudo apt install nodejs
     
-## Project initialization
+### Project initialization
 
 In the directory that's going to contain your project, run
 
@@ -41,7 +44,7 @@ Start the server with
 Try loading this in the browser. You should see the hello world
 message.
 
-## HTML template
+### HTML template
 
 Next let's change the code so that we can serve
 a static HTML template.
@@ -76,7 +79,7 @@ The HTML should be accessible at
 [http://localhost:3003/index.html](http://localhost:3003/index.html)
 once you restart the server.
 
-## Client-side JavaScript
+### Client-side JavaScript
 
 So far we have server-side JavaScript and client-side HTML.
 Let's add some client-side JavaScript to the mix.
@@ -92,7 +95,7 @@ To load this script in the client, add the tag
 To the body of your HTML template. Now you should see the
 alert dialog when you reload the page.
 
-## Attach event listener to the login button
+### Attach event listener to the login button
 
 Next, let's add an event listener to the login button
 that will send an Ajax request to the server to log in.
@@ -167,7 +170,7 @@ Express.
 If successful, you should see an error or success message
 depending on what the server did when getting the request.
 
-## Password authentication
+### Password authentication
 
 OK! Now, on the server, we'd like to perform the
 password authentication and generate the user's token.
@@ -254,7 +257,7 @@ That's it; no modifications are needed for the client yet.
 See if you get a good response when the username/password
 are correct and an error response otherwise.
 
-## Generate the JWT
+### Generate the JWT
 
 Next we'll generate the JSON Web Token representing the user's
 valid authentication.
@@ -287,7 +290,7 @@ with the line
 The client code should receive and display the response object
 without any changes.
 
-## Client storing of JWT and navigation within the SPA
+### Client storing of JWT and navigation within the SPA
 
 Once the client has successfully logged in, it should store
 the username and token information and use it for later
@@ -359,7 +362,7 @@ the browser's session storage for
 <tt>http:\/\/localhost:3003</tt>, you should see the
 username and token.
 
-## Use the stored JWT to authenticate subsequent requests
+### Use the stored JWT to authenticate subsequent requests
 
 Now we'd like to submit a request for some sensitive data
 from the server using our JWT to provide necessary
@@ -374,7 +377,12 @@ some buttons to the secret view:
     <br>
     <button id="logout-button">Log out</button>
 
-Then we add click handlers. Logout is simple. Note that
+Then we add click handlers. Logout is simple if we mean just
+clearing the client session state. A more complete solution
+would add an Ajax call such as "logout" that would revoke
+the token on the server.
+
+Note that
 like the login handler, the calls to set up these callbacks
 need to be in the <tt>window.onload</tt> callback to ensure
 the DOM is set up before we attach the handlers.
@@ -497,14 +505,149 @@ SPA by supplying static resources for ordinary HTTP requests
 and dynamic JSON data for Ajax requests.
 
 Initial password authentication allows generation of a token
-that can be attached to later requests as evidence that the
-bearer has previously been authenticated.
+on the server that the client can attach to later requests
+as evidence that the bearer has previously been authenticated.
 
-Of course, for this solution to be secure, in production,
-we must use SSL. This is typically done by having a proper
-Web server such as Nginx or Apache or a proxy service like
-HAProxy performing the SSL
-termination and possibly serving the static resources
-directly while proxying
-API requests to the port NodeJS is listening on.
+### Limitations
 
+There are a number of issues with this solution to client
+authentication for a SPA:
+
+- For this solution to be secure, in production,
+  we must use SSL. This is typically done by having a proper
+  Web server such as Nginx or Apache or a proxy service like
+  HAProxy performing the SSL
+  termination and possibly serving the static resources
+  directly while proxying
+  API requests to the port NodeJS is listening on.
+
+- Storage of tokens in the browser's sessionStorage is
+  dangerous. Any script from the same origin has access
+  to the sessionStorage data. Sites that use JWTs in this
+  way are particularly vulnerable to XSS attacks.
+
+## Why do devs love JWT?
+
+If you look around online, you'll find many claims about the
+superiority of JWT to other solutions. It may be difficult
+to verify those claims or see the holes in the claims.
+
+You'll also see a lot of security experts poo-pooing JWTs,
+mainly because of how easy it is to do things wrong with them
+plus the very real vulnerability to XSS they introduce
+discussed above.
+
+The main reason devs might legitimately love JWTs is that
+they are easy to understand, are explicitly dealt with
+by your client code, easy to generate, easy to verify,
+and easy to pass around in HTTP headers, as the example here
+and countless online tutorials online show.
+
+Is that solution worth the risk to your users and your
+application data posed by opening yourself up to the
+possibility of XSS attacks?
+
+If you believe your application could not possibly serve
+malicious scripts that might steal JWTs at all, you might feel
+safe enough to "play with fire" and use JWTs with local
+storage.
+
+If, on the other hand, your application does serve
+user-generated content (what interesting application doesn't?),
+however, you should consider a more secure alternative
+to JWTs in local storage.
+
+## A more secure alternative: httpOnly cookies
+
+Instead of sending the JWT directly to the client script
+and having the client return the token in an Authorization header,
+the server can set a cookie to the JWT contents and turn on
+the <tt>httpOnly</tt> flag so that client-side JavaScript
+cannot access the token and relay it to a malicious site.
+
+To switch to cookies in our application, add the
+<tt>cookie-parser</tt> middleware with the following:
+
+    $ npm install --save cookie-parser
+    
+In the server script:
+
+    const cookieParser = require('cookie-parser);
+    ...
+    app.use(cookieParser());
+
+In the snippet executed on successful authentication:
+    
+    res.cookie('authToken', generateJwt(userObj.username), { httpOnly: true });
+    res.send({ username: userObj.username });
+
+You can check that the browser, after authentication, has recorded
+a cookie named <tt>authToken</tt> whose value is the JWT contents
+and which has the <tt>httpOnly</tt> flag set.
+
+Next, we simply remove the Authorization header from subsequent
+requests to <tt>GET /secret</tt> (remember that formerly we
+added the <tt>Authorization</tt> header):
+
+    httpReq.open('GET', uri, true);
+    httpReq.send();
+
+Finally, in the server script, we can perform the same
+validation of the incoming cookie as we previously performed
+for the JWT:
+
+    function checkToken(req, res, next) {
+        if (req.cookies && req.cookies.authToken) {
+            const token = req.cookies.authToken;
+            jwt.verify(token, jwtPublicKey, function (error, payload) {
+                if (error) {
+                    console.log('Error decoding JWT:', error);
+                    res.sendStatus(403);
+                } else {
+                    const dateNow = Date.now();
+                    if (dateNow < payload.exp) {
+                        // You might want to regenerate the token with a fresh expiration here.
+                        console.log('Verified JWT for user', payload.username);
+                        req.username = payload.username;
+                        next();
+                    } else {
+                        console.log('Expired token for user', payload.username);
+                        res.sendStatus(403);
+                    }
+                }
+            });
+            return;
+        }
+        res.sendStatus(403);
+    }
+
+You can verify that no local session storage is needed any
+more, and since we specified the <tt>httpOnly</tt> flag on
+the cookie, the cookie value won't be available to a would-be
+XSS attack.
+
+It's actually simpler than the original <tt>Authorization</tt>
+header design, as the client no longer has to manually attach
+a header to the HTTP request, and the server processing is
+almost identical.
+
+The new problem with this solution is that it is vulnerable
+to CSRF attacks. Let's try to address that next.
+
+## An even better alternative: JWT + httpOnly cookies + CSRF tokens
+
+OK, so JWTs stored client side make us vulnerable to XSS,
+but cookies sent automatically with every request to our
+application make us vulnerable to CSRF.
+
+The key to the CSRF vulnerability is that our JWT token, which
+is basically a free login as the authenticated user for whomever
+gets it, will be forwarded to the application by our
+browser *no matter where the code to make the request comes
+from*. A malicious
+site can plant a link to a target site you've already authenticated
+against and trick you into invoking it.
+
+To fix both,
+we use the JWT + httpOnly cookie from the previous section
+and CSRF tokens.

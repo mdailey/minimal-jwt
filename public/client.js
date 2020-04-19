@@ -68,10 +68,6 @@ function get(uri, successCallback) {
         }
     };
     httpReq.open('GET', uri, true);
-    const token = sessionStorage.getItem('token');
-    if (token) {
-        httpReq.setRequestHeader('Authorization', `Bearer ${token}`)
-    }
     httpReq.send();
 }
 
@@ -89,7 +85,7 @@ function storeToken(loginResponse) {
     sessionStorage.setItem('token', loginResponse.token);
 }
 
-// Function to clear the login form after login is completed
+// Function to clear the login form before we display it
 
 function clearLogin() {
     document.getElementById('login-error').innerHTML = '';
@@ -98,19 +94,27 @@ function clearLogin() {
     document.getElementById('login-result').innerHTML = '';
 }
 
+// Function to clear the secret view before we display it
+
+function clearSecret() {
+    document.getElementById('secret').innerHTML = '';
+    document.getElementById('error').innerHTML = '';
+}
+
 // Function to change to a different view within the application. Currently we have just 2 views.
 
 function changeRoute(uri) {
     switch(uri) {
         case '/login':
+            clearLogin();
             document.getElementById('secret-div').style.display = 'none';
             document.getElementById('login-div').style.display = 'block';
             window.history.pushState(currentRoute, 'Minimal JWT - Login', '/login');
             break;
         case '/secret':
+            clearSecret();
             document.getElementById('secret-div').style.display = 'block';
             document.getElementById('login-div').style.display = 'none';
-            clearLogin();
             window.history.pushState(currentRoute, 'Minimal JWT - Secret', '/secret');
             break;
         default:

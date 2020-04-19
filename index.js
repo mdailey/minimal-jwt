@@ -5,6 +5,7 @@
 
 const express = require('express');
 const bodyParser = require('body-parser');
+const cookieParser = require('cookie-parser');
 const argon2 = require('argon2');
 const jwt = require('jsonwebtoken');
 const fs = require('fs');
@@ -17,6 +18,7 @@ const port = 3003;
 
 const app = express();
 app.use(bodyParser.json());
+app.use(cookieParser());
 
 // Ask Express to serve static resources from the public/ subdirectory
 
@@ -79,7 +81,8 @@ app.post('/login', function (req, res) {
             argon2.verify(userObj.passwordHash, req.body.password).then((success) => {
                 if (success) {
                     console.log('Successful hash verification');
-                    res.send({ username: userObj.username, token: generateJwt(userObj.username) });
+                    res.cookie('authToken', generateJwt(userObj.username), { httpOnly: true });
+                    res.send({ username: userObj.username });
                 } else {
                     console.log('Bad password for user', userObj.username);
                     res.sendStatus(400);
@@ -98,29 +101,26 @@ app.post('/login', function (req, res) {
 // Express filter to check authorization header
 
 function checkToken(req, res, next) {
-    if (req.headers && req.headers.authorization) {
-        const headerValues = req.headers.authorization.split(' ');
-        if (headerValues.length === 2) {
-            const token = headerValues[1];
-            jwt.verify(token, jwtPublicKey, function (error, payload) {
-                if (error) {
-                    console.log('Error decoding JWT:', error);
-                    res.sendStatus(403);
+    if (req.cookies && req.cookies.authToken) {
+        const token = req.cookies.authToken;
+        jwt.verify(token, jwtPublicKey, function (error, payload) {
+            if (error) {
+                console.log('Error decoding JWT:', error);
+                res.sendStatus(403);
+            } else {
+                const dateNow = Date.now();
+                if (dateNow < payload.exp) {
+                    // You might want to regenerate the token with a fresh expiration here.
+                    console.log('Verified JWT for user', payload.username);
+                    req.username = payload.username;
+                    next();
                 } else {
-                    const dateNow = Date.now();
-                    if (dateNow < payload.exp) {
-                        // You might want to regenerate the token with a fresh expiration here.
-                        console.log('Verified JWT for user', payload.username);
-                        req.username = payload.username;
-                        next();
-                    } else {
-                        console.log('Expired token for user', payload.username);
-                        res.sendStatus(403);
-                    }
+                    console.log('Expired token for user', payload.username);
+                    res.sendStatus(403);
                 }
-            });
-            return;
-        }
+            }
+        });
+        return;
     }
     res.sendStatus(403);
 }
