@@ -1,0 +1,29 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <title>Minimal JWT Example</title>
+</head>
+<body>
+<script src="client.js"></script>
+<div id="login-div">
+    <h1>Login</h1>
+    <label for="username">Enter username: </label>
+    <input id="username" name="username">
+    <br>
+    <label for="password">Enter password:</label>
+    <input id="password" type="password">
+    <br>
+    <p id="login-error" style="color: red"></p>
+    <p id="login-result" style="color: green"></p>
+    <button id="login-button">Login</button>
+</div>
+<div id="secret-div" style="display: none">
+    <h1>The Secret</h1>
+    <p>The secret is: <span id="secret" style="color: green"></span></p>
+    <p id="error" style="color: red"></p>
+    <button id="fetch-secret-button">Fetch secret</button>
+    <br>
+    <button id="logout-button">Log out</button>
+</div>
+</body>
+</html>
