@@ -292,9 +292,15 @@ without any changes.
 
 ### Client storing of JWT and navigation within the SPA
 
-Once the client has successfully logged in, it should store
+Once the client has successfully logged in, in this version
+of the code, it will store
 the username and token information and use it for later
-requests. For those later requests, we need views other than
+requests.
+
+Note that the local storage approach leads to XSS vulnerabilities, which
+we will fix later!
+
+To demonstrate those later requests, we need a view other than
 the login page. So let's make some minimal infrastructure for
 routing between different views within the SPA. At the
 beginning of <tt>public/client.js</tt>, before the
@@ -311,40 +317,71 @@ add this code:
 
     changeRoute('/login');
     
-Then, in the login success snippet that currently displays
-the <tt>responseText</tt> from the Ajax <tt>POST /login</tt>
-call, replace with the following code:
+Next, let's abstract the HTTP POST to be reusable.
+Add this function:
 
-    storeToken(JSON.parse(this.responseText));
-    changeRoute('/secret');
-
-Now we just need to define the <tt>changeRoute()</tt> and
-<tt>storeToken()</tt> functions. You can put them at the
-end of the script or anywhere you like:
-
-    function storeToken(loginResponse) {
-        sessionStorage.setItem('username', loginResponse.username);
-        sessionStorage.setItem('token', loginResponse.token);
+    function post(uri, body, errorElement, successCallback) {
+        const httpReq = new XMLHttpRequest();
+        httpReq.onreadystatechange = function () {
+            if (this.readyState === 4 && this.status === 200) {
+                if (successCallback) {
+                    successCallback(JSON.parse(this.responseText));
+                }
+            } else if (this.readyState === 4) {
+                if (errorElement) {
+                    document.getElementById(errorElement).innerHTML = `Server responded with error code ${this.status}`;
+                }
+            }
+        };
+        httpReq.open('POST', uri, true);
+        httpReq.setRequestHeader('Content-Type', 'application/json');
+        httpReq.send(body);
     }
-    
-    function clearLogin() {
+
+We execute the POST. If there is an error, we display the
+error status in the given error element, and otherwise,
+we call the supplied callback with the parsed responseText.
+
+Now you can change the login handling code to look like this:
+
+    const username = document.getElementById('username').value
+    const password = document.getElementById('password').value
+    const body = JSON.stringify({ username: username, password: password });
+    post('/login', body, 'login-error', function (res) {
+        sessionStorage.setItem('username', res.username);
+        sessionStorage.setItem('token', res.token);
+        changeRoute('/secret');
+    });
+
+Now we just need to define the <tt>changeRoute()</tt> function.
+You can put it at the end of the script or anywhere you like:
+
+    function displayLogin() {
         document.getElementById('login-error').innerHTML = '';
         document.getElementById('username').value = '';
         document.getElementById('password').value = '';
         document.getElementById('login-result').innerHTML = '';
+        document.getElementById('secret-div').style.display = 'none';
+        document.getElementById('login-div').style.display = 'block';
     }
+    
+    function displaySecretView() {
+        document.getElementById('secret').innerHTML = '';
+        document.getElementById('error').innerHTML = '';
+        document.getElementById('secret-div').style.display = 'block';
+        document.getElementById('login-div').style.display = 'none';
+    }
+    
+    // Function to change to a different view within the application. Currently we have just 2 views.
     
     function changeRoute(uri) {
         switch(uri) {
             case '/login':
-                document.getElementById('secret-div').style.display = 'none';
-                document.getElementById('login-div').style.display = 'block';
+                displayLogin();
                 window.history.pushState(currentRoute, 'Minimal JWT - Login', '/login');
                 break;
             case '/secret':
-                document.getElementById('secret-div').style.display = 'block';
-                document.getElementById('login-div').style.display = 'none';
-                clearLogin();
+                displaySecretView();
                 window.history.pushState(currentRoute, 'Minimal JWT - Secret', '/secret');
                 break;
             default:
@@ -353,10 +390,12 @@ end of the script or anywhere you like:
         currentRoute = uri;
     }
 
-We've added a function <tt>clearLogin()</tt> to clear out
-the login form when we navigate away from the login route.
+We've added functions to clear out
+the login form or secret text before
+we navigate to that route.
 
-Now, after a login, the browser should display the
+With these changes,
+after a login, the browser should display the
 "Secret" view, and if you use the dev tools to examine
 the browser's session storage for
 <tt>http:\/\/localhost:3003</tt>, you should see the
@@ -371,6 +410,7 @@ authentication information to allow the request.
 On the client side, add an error element and
 some buttons to the secret view:
 
+    <h1>The Secret</h1>
     <p>The secret is: <span id="secret" style="color: green"></span></p>
     <p id="error" style="color: red"></p>
     <button id="fetch-secret-button">Fetch secret</button>
@@ -380,7 +420,7 @@ some buttons to the secret view:
 Then we add click handlers. Logout is simple if we mean just
 clearing the client session state. A more complete solution
 would add an Ajax call such as "logout" that would revoke
-the token on the server.
+the token on the server. More on that later!
 
 Note that
 like the login handler, the calls to set up these callbacks
@@ -390,17 +430,15 @@ the DOM is set up before we attach the handlers.
     window.onload = function () {
         ...
         document.getElementById('logout-button').addEventListener('click', function () {
-            clearToken();
+            sessionStorage.clear();
             changeRoute('/login');
         });
     }
 
-    function clearToken() {
-        sessionStorage.clear();
-    }
-
-For the secret fetching button, we make an Ajax request, attaching
-the authentication token. Let's abstract that capability into a
+For the secret fetching button, we make an Ajax GET
+request, attaching
+the authentication token. As with POST,
+Let's abstract that capability into a
 function we can reuse:
 
     window.onload = function () {
@@ -408,7 +446,7 @@ function we can reuse:
         document.getElementById('fetch-secret-button').addEventListener('click', function () {
             document.getElementById('error').innerHTML = '';
             document.getElementById('secret').innerHTML = '';
-            get('/secret', function (response) {
+            get('/secret', 'error', function (response) {
                 document.getElementById('secret').innerHTML = response.secret;
             });
         });
@@ -418,13 +456,17 @@ We're passing a callback to our <tt>get()</tt> function to
 be executed with the Ajax <tt>responseText</tt> once the
 server returns the result. Here's the code for <tt>get()</tt>:
 
-    function get(uri, successCallback) {
+    function get(uri, errorElement, successCallback) {
         const httpReq = new XMLHttpRequest();
         httpReq.onreadystatechange = function () {
             if (this.readyState === 4 && this.status === 200) {
-                successCallback(JSON.parse(this.responseText));
+                if (successCallback) {
+                    successCallback(JSON.parse(this.responseText));
+                }
             } else if (this.readyState === 4) {
-                document.getElementById('error').innerHTML = `Server responded with error code ${this.status}`;
+                if (errorElement) {
+                    document.getElementById(errorElement).innerHTML = `Server responded with error code ${this.status}`;
+                }
             }
         };
         httpReq.open('GET', uri, true);
@@ -500,7 +542,9 @@ request or response objects before calling <tt>next()</tt>.
 In our case, we supply the authenticated user's username
 to the downstream function by setting <tt>req.username</tt>.
 
-That's it! We've seen how a NodeJS application can serve a
+That's it for a basic demonstration of how JWTs are
+often used in SPAs.
+We've seen how a NodeJS application can serve a
 SPA by supplying static resources for ordinary HTTP requests
 and dynamic JSON data for Ajax requests.
 
@@ -510,10 +554,10 @@ as evidence that the bearer has previously been authenticated.
 
 ### Limitations
 
-There are a number of issues with this solution to client
+There are a couple issues with this solution to client
 authentication for a SPA:
 
-- For this solution to be secure, in production,
+- For the solution to be secure, in production,
   we must use SSL. This is typically done by having a proper
   Web server such as Nginx or Apache or a proxy service like
   HAProxy performing the SSL
@@ -522,9 +566,12 @@ authentication for a SPA:
   API requests to the port NodeJS is listening on.
 
 - Storage of tokens in the browser's sessionStorage is
-  dangerous. Any script from the same origin has access
+  extremely dangerous. Any script from the same origin has access
   to the sessionStorage data. Sites that use JWTs in this
   way are particularly vulnerable to XSS attacks.
+  
+- As of yet, we haven't done anything to mitigate possible
+  CSRF attacks.
 
 ## Why do devs love JWT?
 
@@ -532,18 +579,29 @@ If you look around online, you'll find many claims about the
 superiority of JWT to other solutions. It may be difficult
 to verify those claims or see the holes in the claims.
 
-You'll also see a lot of security experts poo-pooing JWTs,
-mainly because of how easy it is to do things wrong with them
-plus the very real vulnerability to XSS they introduce
-discussed above.
+You'll also see security experts poo-pooing JWTs,
+because of how easy it is to do things wrong with them
+and the very significant vulnerability to XSS they introduce
+as discussed above.
 
-The main reason devs might legitimately love JWTs is that
-they are easy to understand, are explicitly dealt with
-by your client code, easy to generate, easy to verify,
-and easy to pass around in HTTP headers, as the example here
-and countless online tutorials online show.
+What devs seem to like about this solution is that the client
+and server are nicely decoupled. There is no session storage on
+the server.
 
-Is that solution worth the risk to your users and your
+The main reasons devs seem to legitimately love JWTs:
+ 
+- The solution is simple and easy to understand. With the
+  help of a library like jsonwebtoken, tokens are easy to
+  generate and verify.
+
+- The client explicitly handles the passing of the
+  authentication token in a HTTP header.
+
+- The client and server are nicely decoupled. The server
+  is stateless (except the application state stored in the
+  database, of course) with no need for session management.
+  
+Are these benefits worth the risk to your users and your
 application data posed by opening yourself up to the
 possibility of XSS attacks?
 
@@ -557,10 +615,17 @@ user-generated content (what interesting application doesn't?),
 however, you should consider a more secure alternative
 to JWTs in local storage.
 
-## A more secure alternative: httpOnly cookies
+For more detail on the evils of local storage, see
+[Randall Degges' *Please Stop Using Local
+ Storage*](https://www.rdegges.com/2018/please-stop-using-local-storage/).
+There is even a special section of the blog, *PSA: Don't Store
+JSON Web Tokens in Local Storage*.
 
-Instead of sending the JWT directly to the client script
-and having the client return the token in an Authorization header,
+## Preventing XSS vulnerability: httpOnly cookies
+
+Instead of sending the JWT directly to the client,
+which forces it to store the JWT somewhere and
+have it return the token in an Authorization header,
 the server can set a cookie to the JWT contents and turn on
 the <tt>httpOnly</tt> flag so that client-side JavaScript
 cannot access the token and relay it to a malicious site.
@@ -578,8 +643,28 @@ In the server script:
 
 In the snippet executed on successful authentication:
     
-    res.cookie('authToken', generateJwt(userObj.username), { httpOnly: true });
+    const tokenObj = generateJwt(userObj.username);
+    res.cookie('authToken', tokenObj.token, { httpOnly: true, expires: new Date(tokenObj.expires) });
     res.send({ username: userObj.username });
+
+This requires a modified version of the JWT generator:
+
+    function generateJwt(username) {
+        const expires = new Date().valueOf() + (1000 * 60 * 60 * 6) // 6 hours
+        return {
+            token: jwt.sign({
+                username: username,
+                exp: expires,
+            }, jwtPrivateKey, { algorithm: 'RS256' }),
+            expires: expires
+        };
+    }
+
+The client doesn't receive a token to store anymomre. You
+may still want to save the username of the logged-in user:
+
+    sessionStorage.setItem('username', res.username);
+    changeRoute('/secret');
 
 You can check that the browser, after authentication, has recorded
 a cookie named <tt>authToken</tt> whose value is the JWT contents
@@ -594,7 +679,7 @@ added the <tt>Authorization</tt> header):
 
 Finally, in the server script, we can perform the same
 validation of the incoming cookie as we previously performed
-for the JWT:
+for the JWT.
 
     function checkToken(req, res, next) {
         if (req.cookies && req.cookies.authToken) {
@@ -621,20 +706,52 @@ for the JWT:
         res.sendStatus(403);
     }
 
-You can verify that no local session storage is needed any
-more, and since we specified the <tt>httpOnly</tt> flag on
-the cookie, the cookie value won't be available to a would-be
-XSS attack.
+Try it. You can verify that no local session storage is
+needed any more, and since we specified the <tt>httpOnly</tt>
+flag on the cookie, the cookie value won't be available to a
+would-be XSS attack.
 
-It's actually simpler than the original <tt>Authorization</tt>
+In some ways, it's actually simpler than the original
+<tt>Authorization</tt>
 header design, as the client no longer has to manually attach
-a header to the HTTP request, and the server processing is
-almost identical.
+a header to the HTTP request.
 
-The new problem with this solution is that it is vulnerable
-to CSRF attacks. Let's try to address that next.
+Interestingly enough, the main place where we have to change
+the client is in the logout handler. Scripts cannot remove
+<tt>httpOnly</tt> cookies, so we need to do it on the
+server by setting the same cookie with an expiration date
+in the past:
 
-## An even better alternative: JWT + httpOnly cookies + CSRF tokens
+    // POST /logout handler
+    
+    app.post('/logout', function (req, res) {
+        if (req.cookies && req.cookies.authToken) {
+            const expiration = Date.now() - 60 * 60 * 1000;
+            res.cookie('authToken', req.cookies.authToken, { httpOnly: true, expires: new Date(expiration) });
+            res.sendStatus(200);
+        } else {
+            res.sendStatus(400);
+        }
+    });
+
+On the client:
+
+    sessionStorage.clear();
+    post('/logout', null, 'error', null);
+    changeRoute('/login');
+
+With these modifications, your solution should be working.
+We now avoid the possibility of XSS attacks
+stealing our JWT.
+
+The main remaining problem (with the original
+local storage solution too) is that
+we are still vulnerable
+to CSRF attacks, and worse, putting the authentication
+token in a cookie makes our vulnerability to CSRF even more
+severe than it was.
+
+## Preventing CSRF vulnerability: XSRF token
 
 OK, so JWTs stored client side make us vulnerable to XSS,
 but cookies sent automatically with every request to our
@@ -648,6 +765,128 @@ from*. A malicious
 site can plant a link to a target site you've already authenticated
 against and trick you into invoking it.
 
-To fix both,
-we use the JWT + httpOnly cookie from the previous section
+To fix both, we might attempt to
+use the JWT + httpOnly cookie from the previous section
 and CSRF tokens.
+
+Note that CSRF is only an issue for *state changing* requests
+such as transferring money in a banking application,
+changing a grade in a student information system,
+posting content on a CMS, and so on. Tricking an authenticated
+user into accessing a read-only resource is not (normally)
+an issue.
+
+In a classic Web application framework like Rails,
+the server avoids CSRF attacks by
+planting a random token in each form presented to the user as
+a hidden value and checks the token on form submission.
+
+In a SPA, state-changing requests would be Ajax POST, PUT, PATCH,
+and DELETE calls. SPA frontend frameworks like Angular provide
+options for the HTTP client module used to submit Ajax requests
+to automatically submit a CSRF token as an additional header.
+
+In our case, since our sample application is bare-bones
+frameworkless JavaScript, we'll do the same thing manually.
+
+On the server, we need to generate a CSRF token when the user
+authenticates. This is pretty simple; we could just hash a
+random byte sequence. However, most projects use a well-tested
+standard library to do it: the *csurf* npm package.
+
+    $ npm install --save csurf
+
+In the server script:
+
+    const csurf = require('csurf');
+    ...
+    const csrfFilter = csurf({ cookie: true });
+    app.use(csrfFilter);
+    
+    // Add a XSRF-TOKEN header to all responses
+    
+    app.all("*", function (req, res, next) {
+        res.cookie("XSRF-TOKEN", req.csrfToken());
+        next();
+    });
+    
+    // Send error message when CSRF token checking fails
+    
+    app.use(function (err, req, res, next) {
+        if (err.code !== 'EBADCSRFTOKEN') return next(err);
+        res.status(403);
+        res.send('Error: invalid CSRF token');
+    });
+
+Now the first thing you'll notice is that when you load the
+application in the browser, the server sets two cookies,
+<tt>_csrf</tt> and <tt>XSRF-TOKEN</tt>. The first is a
+secret used to generate the actual CSRF token, which is
+stored in <tt>XSRF-TOKEN</tt>. Putting the token generation
+secret in a cookie is intended to let us keep the server
+stateless.
+
+The cookie name <tt>XSRF-TOKEN</tt> is actually arbitrary,
+but here we chose the cookie name expected by default by Angular.
+
+After that, Ajax POST/PUT/PATCH/DELETE requests that don't
+supply a valid CSRF token are caught.
+
+To supply the token with our POST requests, in the client,
+we simply need the code
+
+    httpReq.setRequestHeader('X-XSRF-TOKEN', getCookieValue('XSRF-TOKEN'));
+
+This uses a fast cookie value searcher thanks to a [stack
+ exchange post](https://stackoverflow.com/questions/5639346/what-is-the-shortest-function-for-reading-a-cookie-by-name-in-javascript):
+
+    function getCookieValue(name) {
+        const val = document.cookie.match('(^|[^;]+)\\s*' + name + '\\s*=\\s*([^;]+)');
+        return val ? val.pop() : '';
+    }
+
+That's it for CSRF!
+
+Now our authentication tokens are safe from XSS attacks
+and our little application is innoculated against CSRF.
+
+Just about the only thing missing now is *revocation of
+authentication tokens.*
+
+## Revocation of JWTs
+
+When a user logs out, currently, we invalidate the JWT
+authentication token by forcing its cookie's
+expiration date to be in the past. However, the token
+itself is *still valid*.
+
+The only practical way to invalidate the token on logout
+would be for the server to maintain a list of revoked
+but unexpired JWTs and reject use of any JWTs on that list.
+
+We won't go through an implementation of that pattern, however,
+because it eliminates the only reason we started using JWTs
+in the first place, which was to not have to maintain client
+state on the server!
+
+## Back to the 2000's: POWS (Plain Old Web Sessions)
+
+Clever, eh? I just made that acronym up.
+
+So we've seen that to use JWTs as authentication tokens for
+a stateless server safely, we have to store them in httpOnly
+cookies on the client, take care of the resulting CSRF
+vulnerability, and take a risk by handing out irrevocable
+login credentials.
+
+Which do you want more, a stateless server or revocable logins?
+If you talk to any security expert, they will tell you that
+irrevocable logins is a show stopper.
+
+If so, what can we do? Well, we go back to ordinary session
+keys stored in httpOnly cookies and some kind of session storage
+on the server. 
+
+Next we'll do away with JWTs entirely and use
+Express's session functionality via
+the <tt>express-session</tt> package.

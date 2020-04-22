@@ -9,18 +9,44 @@ const cookieParser = require('cookie-parser');
 const argon2 = require('argon2');
 const jwt = require('jsonwebtoken');
 const fs = require('fs');
+const csurf = require('csurf');
 
 // Port the server will listen on
 
 const port = 3003;
 
-// Initialize Express and tell it to automatically parse Content-Type: application/json body data
+// Initialize Express, tell it to automatically parse Content-Type: application/json body data,
+// tell it to automatically parse incoming cookie data, and ask it to generate and check CSRF
+// tokens.
 
 const app = express();
 app.use(bodyParser.json());
 app.use(cookieParser());
 
-// Ask Express to serve static resources from the public/ subdirectory
+// Use the double submit cookie pattern.
+
+const csrfFilter = csurf({ cookie: true, ignoreMethods: [ 'GET', 'HEAD', 'OPTIONS' ] });
+
+// Apply CSRF checking to all routes (except GET/HEAD/OPTIONS routes)
+
+app.use(csrfFilter);
+
+// Add the XSRF-TOKEN header to all responses
+
+app.all("*", function (req, res, next) {
+    res.cookie("XSRF-TOKEN", req.csrfToken());
+    next();
+});
+
+// Give a nice error message when CSRF token checking fails
+
+app.use(function (err, req, res, next) {
+    if (err.code !== 'EBADCSRFTOKEN') return next(err);
+    res.status(403);
+    res.send('Error: invalid CSRF token');
+});
+
+// Ask Express to serve static resources from the public/ subdirectory.
 
 app.use(express.static('public'));
 
@@ -61,15 +87,19 @@ users.forEach(function (userObj) {
 // Generate a JWT for given username that is valid for 6 hours
 
 function generateJwt(username) {
-    return jwt.sign({
-        username: username,
-        exp: new Date().valueOf() + (1000 * 60 * 60 * 6) // 6 hours
-    }, jwtPrivateKey, { algorithm: 'RS256' });
+    const expires = new Date().valueOf() + (1000 * 60 * 60 * 6) // 6 hours
+    return {
+        token: jwt.sign({
+            username: username,
+            exp: expires,
+        }, jwtPrivateKey, { algorithm: 'RS256' }),
+        expires: expires
+    };
 }
 
-// POST /login handler. Verify the username and passowrd, and if successful, respond with a new JWT
+// POST /login handler. Verify the username and password, and if successful, respond with a new JWT
 
-app.post('/login', function (req, res) {
+app.post('/login', csrfFilter, function (req, res) {
     console.log('Got login request with body', req.body);
     if (req.body && req.body.username && req.body.password) {
         const matchingUsers = users.filter(obj => { return obj.username === req.body.username });
@@ -81,7 +111,8 @@ app.post('/login', function (req, res) {
             argon2.verify(userObj.passwordHash, req.body.password).then((success) => {
                 if (success) {
                     console.log('Successful hash verification');
-                    res.cookie('authToken', generateJwt(userObj.username), { httpOnly: true });
+                    const tokenObj = generateJwt(userObj.username);
+                    res.cookie('authToken', tokenObj.token, { httpOnly: true, expires: new Date(tokenObj.expires) });
                     res.send({ username: userObj.username });
                 } else {
                     console.log('Bad password for user', userObj.username);
@@ -94,6 +125,18 @@ app.post('/login', function (req, res) {
         }
     } else {
         console.log('Got POST /login without username and password in body');
+        res.sendStatus(400);
+    }
+});
+
+// POST /logout handler
+
+app.post('/logout', function (req, res) {
+    if (req.cookies && req.cookies.authToken) {
+        const expiration = Date.now() - 60 * 60 * 1000;
+        res.cookie('authToken', req.cookies.authToken, { httpOnly: true, expires: new Date(expiration) });
+        res.sendStatus(200);
+    } else {
         res.sendStatus(400);
     }
 });
@@ -137,7 +180,7 @@ function userSecret(username) {
 
 // GET /secret handler. checkToken() filter is used to ensure the request is authentic.
 
-app.get('/secret', checkToken, function (req, res) {
+app.get('/secret', csrfFilter, checkToken, function (req, res) {
     console.log('Request for secret by', req.username);
     res.send({ username: req.username, secret: userSecret(req.username) });
 });
