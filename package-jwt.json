@@ -1,7 +1,7 @@
 {
   "name": "minimal-jwt",
   "version": "1.0.0",
-  "description": "Example Node application using sessions.",
+  "description": "Here's an example of a minimal Node application using JWT.",
   "main": "index.js",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1"
@@ -9,17 +9,15 @@
   "author": "",
   "license": "ISC",
   "dependencies": {
+    "@types/express": "^4.17.6",
     "argon2": "^0.26.2",
     "body-parser": "^1.19.0",
-    "connect-redis": "^4.0.4",
     "cookie-parser": "^1.4.5",
     "csurf": "^1.11.0",
     "express": "^4.17.1",
-    "express-session": "^1.17.1",
-    "redis": "^3.0.2"
+    "jsonwebtoken": "^8.5.1"
   },
   "devDependencies": {
-    "@types/cookie-parser": "^1.4.2",
-    "@types/express": "^4.17.6"
+    "@types/cookie-parser": "^1.4.2"
   }
 }

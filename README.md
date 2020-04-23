@@ -890,3 +890,95 @@ on the server.
 Next we'll do away with JWTs entirely and use
 Express's session functionality via
 the <tt>express-session</tt> package.
+
+First, install the package:
+
+    $ npm install --save express-session
+
+You can remove jsonwebtoken. We have to
+keep csurf and cookie-parser, as session cookies
+introduce the same CSRF
+vulnerability as authentication tokens stored in cookies:
+
+    $ npm remove jsonwebtoken
+
+The express session module needs a storage mechanism.
+There is a memory store that's only for debugging and
+not production use.
+
+So let's use Redis, the most popular store for Express
+sessions. It is in-memory and very fast and robust.
+
+    $ sudo apt install redis-server
+    $ npm install --save redis connect-redis
+
+In the server script, remove the
+jsonwebtoken <tt>require</tt> call and add
+
+    const redis = require('redis');
+    const session = require('express-session');
+    const RedisStore = require('connect-redis')(session)
+    ...
+    const redisClient = redis.createClient()
+    app.use(
+      session({
+        store: new RedisStore({ client: redisClient }),
+        secret: 'keyboard cat',
+        resave: false,
+        saveUninitialized: true
+      })
+    );
+
+Remove the JWT private/public key reading code,
+the <tt>generateJWT()</tt> function, the
+<tt>checkToken()</tt> function, and change the
+hash verification success code in the
+<tt>POST /login</tt> handler
+to the following:
+
+    req.session.username = userObj.username;
+    res.send({ username: userObj.username });
+
+The <tt>POST /logout</tt> handler becomes
+
+    if (req.session.username) {
+        req.session.username = null;
+        res.sendStatus(200);
+    } else {
+        res.sendStatus(400);
+    }
+
+And the <tt>GET /secret</tt> handler becomes
+
+    app.get('/secret', function (req, res) {
+        if (!req.session.username) {
+            // Unauthorized access
+            res.sendStatus(401);
+        } else {
+            const secret = userSecret(req.session.username);
+            if (secret) {
+                // OK
+                res.send({ username: req.username, secret: secret });
+            } else {
+                // Not found
+                res.sendStatus(404);
+            }
+        }
+    });
+
+That's it for the POWS version. Give it a try. You should
+see the server setting a new cookie <tt>connect.sid</tt>
+with <tt>httpOnly</tt> turned on. Our session ID is thus safe
+from XSS attacks, and we're already resilient to CSRF.
+
+The server script size went from 190 lines to 156 lines once
+we removed all the JWT stuff. And we got revocation on
+logout for free.
+
+What's the downside? A JWT enthusiast may say this solution won't
+scale to Internet size or won't be good for huge microservice
+applications. And they may decry the new complexity of the server
+side stack now using the Redis service for session storage.
+
+But for 95% of all applications, you're probably better off
+with sessions.
