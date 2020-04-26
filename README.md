@@ -24,7 +24,7 @@ You can accept the defaults. This creates an initial
 <tt>package.json</tt> file that describes your new
 package and its dependencies.
 
-## Initial program
+### 3. Initial program
 
 Create a file <tt>index.js</tt> in the same directory.
 Give it the following initial contents:
@@ -44,7 +44,7 @@ Start the server with
 Try loading this in the browser. You should see the hello world
 message.
 
-### 3. HTML template
+### 4. HTML template
 
 Next let's change the code so that we can serve
 a static HTML template.
@@ -81,7 +81,7 @@ The HTML should be accessible at
 [http://localhost:3003/index.html](http://localhost:3003/index.html)
 once you restart the server.
 
-### 4. Client-side JavaScript
+### 5. Client-side JavaScript
 
 So far we have server-side JavaScript and client-side HTML.
 Let's add some client-side JavaScript to the mix.
@@ -97,7 +97,7 @@ To load this script in the client, add the tag
 To the body of your HTML template. Now you should see the
 alert dialog when you reload the page.
 
-### 5. Attach event listener to the login button
+### 6. Attach event listener to the login button
 
 Next, let's add an event listener to the login button
 that will send an Ajax request to the server to log in.
@@ -172,7 +172,7 @@ Express.
 If successful, you should see an error or success message
 depending on what the server did when getting the request.
 
-### 6. Password authentication
+### 7. Password authentication
 
 OK! Now, on the server, we'd like to perform the
 password authentication and generate the user's token.
@@ -259,7 +259,7 @@ That's it; no modifications are needed for the client yet.
 See if you get a good response when the username/password
 are correct and an error response otherwise.
 
-### 7. Generate the JWT
+### 8. Generate the JWT
 
 Next we'll generate the JSON Web Token representing the user's
 valid authentication.
@@ -308,7 +308,7 @@ with the line
 The client code should receive and display the response object
 without any changes.
 
-### 8. Client storing of JWT and navigation within the SPA
+### 9. Client storing of JWT and navigation within the SPA
 
 Once the client has successfully logged in, in this version
 of the code, it will store
@@ -419,7 +419,7 @@ the browser's session storage for
 <tt>http:\/\/localhost:3003</tt>, you should see the
 username and token.
 
-### 9. Use the stored JWT to authenticate subsequent requests
+### 10. Use the stored JWT to authenticate subsequent requests
 
 Now we'd like to submit a request for some sensitive data
 from the server using our JWT to provide necessary
