@@ -67,6 +67,8 @@ Then create a file <tt>public/index.html</tt> with contents
         <input id="username" name="username">
         <label for="password">Enter password:</label>
         <input id="password" type="password">
+        <br>
+        <button id="login-button">Login</button>
     </div>
     <div id="secret-div" style="display: none">
         <h1>The Secret</h1>
@@ -90,7 +92,7 @@ with content as follows:
 
 To load this script in the client, add the tag
 
-    <script src="index.js"></script>
+    <script src="client.js"></script>
 
 To the body of your HTML template. Now you should see the
 alert dialog when you reload the page.
@@ -190,7 +192,7 @@ In the server script, add this code:
 
     const argon2 = require('argon2');
     ...
-    const users = [{ username: 'cnamprem', password: 'secret123', passwordHash: '' }];
+    const users = [{ username: 'foouser', password: '111', passwordHash: '' }];
     users.forEach(function (userObj) {
         argon2.hash(userObj.password).then(function (hash) {
             userObj.passwordHash = hash;
@@ -267,6 +269,22 @@ valid authentication.
 In the server script, add
 
     const jwt = require('jsonwebtoken');
+    const fs = require('fs');
+    ...
+    let jwtPrivateKey = null;
+    let jwtPublicKey = null;
+    try {
+        jwtPrivateKey = fs.readFileSync('jwt_priv.pem');
+        jwtPublicKey = fs.readFileSync('jwt_pub.pem');
+    } catch (e) {
+        // Need to generate public/private keypair for JWT
+        console.log('Need to generate key! Run the following commands:');
+        console.log('openssl genrsa -des3 -out jwt.pem -passout pass:foobar 2048');
+        console.log('openssl rsa -in jwt.pem -outform PEM -pubout -out jwt_pub.pem -passin pass:foobar');
+        console.log('openssl rsa -in jwt.pem -outform PEM -out jwt_priv.pem -passin pass:foobar');
+        console.log('rm -f jwt.pem');
+        throw new Error('Generate RSA keys first');
+    }
     ...
     function generateJwt(username) {
         return jwt.sign({
@@ -982,3 +1000,6 @@ side stack now using the Redis service for session storage.
 
 But for 95% of all applications, you're probably better off
 with sessions.
+
+
+
