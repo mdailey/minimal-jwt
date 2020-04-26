@@ -175,7 +175,7 @@ depending on what the server did when getting the request.
 ### 7. Password authentication
 
 OK! Now, on the server, we'd like to perform the
-password authentication and generate the user's token.
+password authentication.
 
 In a real application, we'd have a user database
 containing the username and salted/hashed password.
