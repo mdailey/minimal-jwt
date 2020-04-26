@@ -7,13 +7,13 @@ and a couple alternatives that address those flaws.
 
 ## A basic single page application using JWTs for authentication
 
-### NodeJS installation
+### 1. NodeJS installation
 
     $ sudo apt install curl software-properties-common
     $ curl -sL https://deb.nodesource.com/setup_10.x | sudo -E bash -
     $ sudo apt install nodejs
     
-### Project initialization
+### 2. Project initialization
 
 In the directory that's going to contain your project, run
 
@@ -44,7 +44,7 @@ Start the server with
 Try loading this in the browser. You should see the hello world
 message.
 
-### HTML template
+### 3. HTML template
 
 Next let's change the code so that we can serve
 a static HTML template.
@@ -81,7 +81,7 @@ The HTML should be accessible at
 [http://localhost:3003/index.html](http://localhost:3003/index.html)
 once you restart the server.
 
-### Client-side JavaScript
+### 4. Client-side JavaScript
 
 So far we have server-side JavaScript and client-side HTML.
 Let's add some client-side JavaScript to the mix.
@@ -97,7 +97,7 @@ To load this script in the client, add the tag
 To the body of your HTML template. Now you should see the
 alert dialog when you reload the page.
 
-### Attach event listener to the login button
+### 5. Attach event listener to the login button
 
 Next, let's add an event listener to the login button
 that will send an Ajax request to the server to log in.
@@ -172,7 +172,7 @@ Express.
 If successful, you should see an error or success message
 depending on what the server did when getting the request.
 
-### Password authentication
+### 6. Password authentication
 
 OK! Now, on the server, we'd like to perform the
 password authentication and generate the user's token.
@@ -259,7 +259,7 @@ That's it; no modifications are needed for the client yet.
 See if you get a good response when the username/password
 are correct and an error response otherwise.
 
-### Generate the JWT
+### 7. Generate the JWT
 
 Next we'll generate the JSON Web Token representing the user's
 valid authentication.
@@ -308,7 +308,7 @@ with the line
 The client code should receive and display the response object
 without any changes.
 
-### Client storing of JWT and navigation within the SPA
+### 8. Client storing of JWT and navigation within the SPA
 
 Once the client has successfully logged in, in this version
 of the code, it will store
@@ -419,7 +419,7 @@ the browser's session storage for
 <tt>http:\/\/localhost:3003</tt>, you should see the
 username and token.
 
-### Use the stored JWT to authenticate subsequent requests
+### 9. Use the stored JWT to authenticate subsequent requests
 
 Now we'd like to submit a request for some sensitive data
 from the server using our JWT to provide necessary
@@ -570,7 +570,7 @@ Initial password authentication allows generation of a token
 on the server that the client can attach to later requests
 as evidence that the bearer has previously been authenticated.
 
-### Limitations
+## Limitations
 
 There are a couple issues with this solution to client
 authentication for a SPA:
