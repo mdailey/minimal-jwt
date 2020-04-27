@@ -588,7 +588,7 @@ authentication for a SPA:
   to the sessionStorage data. Sites that use JWTs in this
   way are particularly vulnerable to XSS attacks.
   
-- As of yet, we haven't done anything to mitigate possible
+- We also haven't done anything to mitigate possible
   CSRF attacks.
 
 ## Why do devs love JWT?
