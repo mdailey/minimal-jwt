@@ -9,7 +9,7 @@
   "author": "",
   "license": "ISC",
   "dependencies": {
-    "argon2": "^0.26.2",
+    "argon2": "^0.30.3",
     "body-parser": "^1.20.1",
     "connect-redis": "^4.0.4",
     "cookie-parser": "^1.4.5",
